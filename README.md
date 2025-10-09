@@ -11,12 +11,10 @@ This repository applies the ASAP model to the [NoXi (Novice-eXpert interaction) 
 
 **NoXi Dataset Paper:** [Cafaro et al., 2017](https://dl.acm.org/doi/10.1145/3136755.3136780)
 
-**Additions:**
-- NoXi dataset preprocessing scripts (`/preprocessing`)
-- Feature extraction guides (OpenFace + OpenSMILE)
-- Experiment tracking
-
-**Status:** In progress - awaiting NoXi dataset access
+**Goals:**
+- Apply ASAP model to NoXi dataset
+- Create preprocessing pipeline for NoXi data
+- Evaluate and compare results
 
 ---
 
