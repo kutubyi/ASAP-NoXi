@@ -1,0 +1,14 @@
+# Python version: 3.11.x
+# Tested on macOS 14.x+ (Sequoia)
+
+# Core ML dependencies
+tensorflow==2.15.1
+keras==2.15.0
+numpy==1.26.4
+pandas==2.3.3
+scipy==1.16.2
+dtw-python==1.5.3
+
+# For NoXi preprocessing
+opencv-python==4.11.0.86
+opensmile==2.6.0
