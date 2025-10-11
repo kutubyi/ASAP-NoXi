@@ -16,6 +16,19 @@ This repository applies the ASAP model to the [NoXi (Novice-eXpert interaction) 
 - Create preprocessing pipeline for NoXi data
 - Evaluate and compare results
 
+## Setup
+
+**Requirements:** Python 3.11 + see [requirements.txt](requirements.txt)
+
+The requirements are a tested working newer version combo compatible with the original code. Some packages are newer than the original as some versions are no longer available.
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python test_setup.py  # Verify compatibility
+```
+
 ---
 
 # Original ASAP Model
