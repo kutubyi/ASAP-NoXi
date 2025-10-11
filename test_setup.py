@@ -112,8 +112,3 @@ except ImportError:
 print("\n" + "="*50)
 print("✓ All core tests passed! ASAP is ready to use.")
 print("="*50)
-print("\nNext steps:")
-print("  - Install OpenFace for visual feature extraction")
-print("  - Wait for NoXi dataset access")
-print("  - Run preprocessing pipeline")
-print("  - Train ASAP model on NoXi data")
