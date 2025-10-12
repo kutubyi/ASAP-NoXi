@@ -1,7 +1,8 @@
 """
 NoXi Session Preprocessing for ASAP Model
-Usage: 
-    python preprocessing/preprocess.py <session_name>
+Usage:
+    python preprocessing/preprocess.py Augsburg_01
+    python preprocessing/preprocess.py --city Augsburg
     python preprocessing/preprocess.py --all
 """
 
@@ -151,6 +152,67 @@ def preprocess_session(session_path, seq_length=100, stride=1):
     }
 
 
+def preprocess_city(data_dir, output_dir, city_name):
+    """Preprocess all sessions for a specific city."""
+    data_dir = Path(data_dir)
+    output_dir = Path(output_dir) / city_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Find all sessions for the city
+    sessions = sorted([d.name for d in data_dir.iterdir()
+                      if d.is_dir() and d.name.startswith(city_name)])
+
+    if not sessions:
+        print(f"No sessions found for city: {city_name}")
+        return
+
+    print(f"\nFound {len(sessions)} sessions for {city_name}")
+
+    X_list, Y_list = [], []
+    for session in sessions:
+        try:
+            result = preprocess_session(data_dir / session)
+            X_list.append(result['X'])
+            Y_list.append(result['Y'])
+        except Exception as e:
+            print(f"Skipping {session}: {e}")
+
+    # Combine all sessions
+    X_all = np.concatenate(X_list, axis=0)
+    Y_all = np.concatenate(Y_list, axis=0)
+
+    print(f"\n{'='*60}")
+    print(f"Combined: {X_all.shape}")
+    print(f"{'='*60}")
+
+    mean_X = X_all.mean(axis=(0, 1))
+    std_X = X_all.std(axis=(0, 1)) + 1e-8
+    X_norm = (X_all - mean_X) / std_X
+
+    visual_indices = list(range(0, 12)) + list(range(28, 40))
+    mean_Y = mean_X[visual_indices]
+    std_Y = std_X[visual_indices]
+    Y_norm = (Y_all - mean_Y) / std_Y
+
+    # Split into train (80%) and val (20%)
+    split_idx = int(len(X_norm) * 0.8)
+    X_train, X_val = X_norm[:split_idx], X_norm[split_idx:]
+    Y_train, Y_val = Y_norm[:split_idx], Y_norm[split_idx:]
+
+    # Save
+    np.save(output_dir / "Xij_train.npy", X_train)
+    np.save(output_dir / "Yij_train.npy", Y_train)
+    np.save(output_dir / "Xij_val.npy", X_val)
+    np.save(output_dir / "Yij_val.npy", Y_val)
+    np.save(output_dir / "stats.npy", {'mean_X': mean_X, 'std_X': std_X, 'mean_Y': mean_Y, 'std_Y': std_Y})
+
+    print(f"\nSaved to {output_dir}:")
+    print(f"  Xij_train.npy: {X_train.shape}")
+    print(f"  Yij_train.npy: {Y_train.shape}")
+    print(f"  Xij_val.npy: {X_val.shape}")
+    print(f"  Yij_val.npy: {Y_val.shape}")
+
+
 def preprocess_all(data_dir, output_dir):
     """Preprocess all sessions in data_dir and save combined output."""
     data_dir = Path(data_dir)
@@ -213,6 +275,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Preprocess NoXi for ASAP model')
     parser.add_argument('session_name', type=str, nargs='?', help='Single session (e.g., Augsburg_01)')
     parser.add_argument('--all', action='store_true', help='Process all sessions')
+    parser.add_argument('--city', type=str, help='Process all sessions for a city (e.g., Augsburg)')
 
     args = parser.parse_args()
 
@@ -220,12 +283,15 @@ if __name__ == "__main__":
     project_root = script_dir.parent
     data_dir = project_root / "data" / "raw" / "noxi"
 
-    if args.all:
+    if args.city:
+        output_dir = project_root / "data" / "processed"
+        preprocess_city(data_dir, output_dir, args.city)
+    elif args.all:
         output_dir = project_root / "data" / "processed"
         preprocess_all(data_dir, output_dir)
     else:
         if not args.session_name:
-            print("Error: Provide session_name or use --all")
+            print("Usage: python preprocessing/preprocess.py [SESSION_NAME | --city CITY | --all]")
             exit(1)
 
         result = preprocess_session(data_dir / args.session_name)
