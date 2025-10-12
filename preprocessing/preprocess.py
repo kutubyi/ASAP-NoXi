@@ -1,6 +1,8 @@
 """
 NoXi Session Preprocessing for ASAP Model
-Usage: python preprocessing/preprocess.py <session_name>
+Usage: 
+    python preprocessing/preprocess.py <session_name>
+    python preprocessing/preprocess.py --all
 """
 
 import os
@@ -82,13 +84,17 @@ def select_participant_features(visual_df, audio_df):
 
 
 def create_sequences(features, seq_length=100, stride=1):
-    """Create sliding window sequences. Y is shifted by 1 frame."""
+    """
+    Create sliding window sequences.
+    """
     print(f"\nCreating sequences (length={seq_length}, stride={stride})")
+
+    visual_indices = list(range(0, 12)) + list(range(28, 40))
 
     X, Y = [], []
     for i in range(0, len(features) - seq_length, stride):
         X.append(features[i:i+seq_length])
-        Y.append(features[i+1:i+seq_length+1])
+        Y.append(features[i+1:i+seq_length+1, visual_indices])
 
     X = np.array(X, dtype=np.float32)
     Y = np.array(Y, dtype=np.float32)
@@ -110,14 +116,12 @@ def preprocess_session(session_path, seq_length=100, stride=1):
     print(f"Processing session: {session_path.name}")
     print(f"{'='*60}\n")
 
-    # Process expert
     print("Expert:")
     exp_vis = load_visual_features(session_path / "non_varbal_expert.csv")
     exp_aud = extract_audio_features(session_path / "audio_expert.wav")
     expert_feat, exp_vis_names, exp_aud_names = select_participant_features(exp_vis, exp_aud)
     print(f"  Expert features: {expert_feat.shape}")
 
-    # Process novice
     print("\nNovice:")
     nov_vis = load_visual_features(session_path / "non_varbal_novice.csv")
     nov_aud = extract_audio_features(session_path / "audio_novice.wav")
@@ -147,27 +151,111 @@ def preprocess_session(session_path, seq_length=100, stride=1):
     }
 
 
+def preprocess_all(data_dir, output_dir):
+    """Preprocess all sessions in data_dir and save combined output."""
+    data_dir = Path(data_dir)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Find all sessions
+    sessions = sorted([d.name for d in data_dir.iterdir() if d.is_dir()])
+    print(f"\nFound {len(sessions)} sessions")
+    print("="*60)
+
+    X_list, Y_list = [], []
+    for session in sessions:
+        try:
+            result = preprocess_session(data_dir / session)
+            X_list.append(result['X'])
+            Y_list.append(result['Y'])
+        except Exception as e:
+            print(f"Skipping {session}: {e}")
+
+    # Combine all sessions
+    X_all = np.concatenate(X_list, axis=0)
+    Y_all = np.concatenate(Y_list, axis=0)
+
+    print(f"\n{'='*60}")
+    print(f"Combined: {X_all.shape}")
+    print(f"{'='*60}")
+
+    mean_X = X_all.mean(axis=(0, 1))
+    std_X = X_all.std(axis=(0, 1)) + 1e-8
+    X_norm = (X_all - mean_X) / std_X
+
+    visual_indices = list(range(0, 12)) + list(range(28, 40))
+    mean_Y = mean_X[visual_indices]
+    std_Y = std_X[visual_indices]
+    Y_norm = (Y_all - mean_Y) / std_Y
+
+    # Split into train (80%) and val (20%)
+    split_idx = int(len(X_norm) * 0.8)
+    X_train, X_val = X_norm[:split_idx], X_norm[split_idx:]
+    Y_train, Y_val = Y_norm[:split_idx], Y_norm[split_idx:]
+
+    # Save
+    np.save(output_dir / "Xij_train.npy", X_train)
+    np.save(output_dir / "Yij_train.npy", Y_train)
+    np.save(output_dir / "Xij_val.npy", X_val)
+    np.save(output_dir / "Yij_val.npy", Y_val)
+    np.save(output_dir / "stats.npy", {'mean_X': mean_X, 'std_X': std_X, 'mean_Y': mean_Y, 'std_Y': std_Y})
+
+    print(f"\nSaved to {output_dir}:")
+    print(f"  Xij_train.npy: {X_train.shape}")
+    print(f"  Yij_train.npy: {Y_train.shape}")
+    print(f"  Xij_val.npy: {X_val.shape}")
+    print(f"  Yij_val.npy: {Y_val.shape}")
+
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description='Preprocess NoXi for ASAP model')
-    parser.add_argument('session_name', type=str, help='Session name (e.g., Augsburg_01)')
+    parser.add_argument('session_name', type=str, nargs='?', help='Single session (e.g., Augsburg_01)')
+    parser.add_argument('--all', action='store_true', help='Process all sessions')
 
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
     project_root = script_dir.parent
+    data_dir = project_root / "data" / "raw" / "noxi"
 
-    session_path = project_root / "data" / "raw" / "noxi" / args.session_name
+    if args.all:
+        output_dir = project_root / "data" / "processed"
+        preprocess_all(data_dir, output_dir)
+    else:
+        if not args.session_name:
+            print("Error: Provide session_name or use --all")
+            exit(1)
 
-    result = preprocess_session(session_path)
+        result = preprocess_session(data_dir / args.session_name)
 
-    print(f"\n{'='*60}")
-    print("Summary")
-    print(f"{'='*60}")
-    print(f"Session: {result['session_name']}")
-    print(f"Duration: {result['duration_seconds']:.2f}s")
-    print(f"Sequences: {result['num_sequences']}")
-    print(f"\nFeatures (56 total = 28 expert + 28 novice):")
-    for i, name in enumerate(result['feature_names'], 1):
-        print(f"  {i:2d}. {name}")
+        print(f"\n{'='*60}")
+        print("Summary")
+        print(f"{'='*60}")
+        print(f"Session: {result['session_name']}")
+        print(f"Duration: {result['duration_seconds']:.2f}s")
+        print(f"Sequences: {result['num_sequences']}")
+        print(f"\nFeatures (56 total = 28 expert + 28 novice):")
+        for i, name in enumerate(result['feature_names'], 1):
+            print(f"  {i:2d}. {name}")
+
+        # Save single session to disk
+        output_dir = project_root / "data" / "processed" / result['session_name']
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        np.save(output_dir / "X.npy", result['X'])
+        np.save(output_dir / "Y.npy", result['Y'])
+        np.save(output_dir / "metadata.npy", {
+            'session_name': result['session_name'],
+            'feature_names': result['feature_names'],
+            'num_sequences': result['num_sequences'],
+            'duration_seconds': result['duration_seconds']
+        })
+
+        print(f"\n{'='*60}")
+        print(f"Saved to {output_dir}:")
+        print(f"  X.npy: {result['X'].shape}")
+        print(f"  Y.npy: {result['Y'].shape}")
+        print(f"  metadata.npy")
+        print(f"{'='*60}")
