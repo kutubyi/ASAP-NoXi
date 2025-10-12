@@ -356,22 +356,22 @@ def evaluate_model(model, xij_test, params_config, data_path, saved_prediction=F
 
 def load_training_data(data_path):
 	'Load preprocessed train and validation datasets'
-	xij_tr = np.load(data_path+"/XijTrain_inseq100_outseq1_stride1.npy",allow_pickle=True, mmap_mode='r')[0].astype(np.float32)
-	yij_tr = np.load(data_path+"/YijTrain_inseq100_outseq1_stride1.npy",allow_pickle=True, mmap_mode='r')[0].astype(np.float32)
-	xij_val = np.load(data_path+"/XijVal_inseq100_outseq1_stride1.npy",allow_pickle=True, mmap_mode='r')[0].astype(np.float32)
-	yij_val = np.load(data_path+"/YijVal_inseq100_outseq1_stride1.npy",allow_pickle=True, mmap_mode='r')[0].astype(np.float32)
+	xij_tr = np.load(data_path+"/Xij_train.npy", allow_pickle=True).astype(np.float32)
+	yij_tr = np.load(data_path+"/Yij_train.npy", allow_pickle=True).astype(np.float32)
+	xij_val = np.load(data_path+"/Xij_val.npy", allow_pickle=True).astype(np.float32)
+	yij_val = np.load(data_path+"/Yij_val.npy", allow_pickle=True).astype(np.float32)
 
 	# Randomize training dataset (shuffle samples)
 	np.random.seed(42)
 	np.random.shuffle(xij_tr)
 	np.random.seed(42)
 	np.random.shuffle(yij_tr)
-	
+
 	return [xij_tr, yij_tr, xij_val, yij_val]
 
 def load_test_data(data_path):
 	'Load preprocessed test dataset'
-	xij_test = np.load(data_path+"/dataTest.npy",allow_pickle=True)
+	xij_test = np.load(data_path+"/Xij_test.npy", allow_pickle=True)
 
 	return xij_test
 
