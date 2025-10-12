@@ -33,7 +33,7 @@ if __name__ == "__main__":
   '''
   Training of ASAP model
   '''
-  data_path = '../data'
+  data_path = 'data/processed'
 
   [xij_tr, yij_tr, xij_val, yij_val] = load_training_data(data_path)
 
