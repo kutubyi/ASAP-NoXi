@@ -56,6 +56,13 @@ def select_participant_features(visual_df, audio_df):
 
     visual_selected = visual_df[visual_features].values
 
+    # Clip outlier head positions caused by tracking failures
+    # Analysis (using investigate_outliers.py) shows values > 2.0 are single-frame spikes
+    head_outliers = (np.abs(visual_selected[:, 0:3]) > 2.0).sum()
+    if head_outliers > 0:
+        print(f"    Clipping {head_outliers} outlier head values (tracking errors > 2.0)")
+        visual_selected[:, 0:3] = np.clip(visual_selected[:, 0:3], -2.0, 2.0)
+
     audio_keywords = ['F0semitone', 'loudness', 'jitterLocal', 'shimmer', 'HNR', 'mfcc']
 
     audio_cols = []
@@ -158,10 +165,20 @@ def _process_and_split_sessions(sessions, X_list, Y_list, output_dir):
 
     Args:
         sessions: List of session names
-        X_list: List of X arrays 
-        Y_list: List of Y arrays 
+        X_list: List of X arrays
+        Y_list: List of Y arrays
         output_dir: Directory to save the train/val splits
     """
+    # Randomly shuffle sessions before splitting to avoid temporal bias
+    import random
+    random.seed(42)  # Fixed seed for reproducibility
+    combined = list(zip(sessions, X_list, Y_list))
+    random.shuffle(combined)
+    sessions, X_list, Y_list = zip(*combined)
+    sessions = list(sessions)
+    X_list = list(X_list)
+    Y_list = list(Y_list)
+
     num_train_sessions = int(len(sessions) * 0.8)
     train_sessions = sessions[:num_train_sessions]
     val_sessions = sessions[num_train_sessions:]
