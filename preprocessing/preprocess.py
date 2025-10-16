@@ -152,6 +152,73 @@ def preprocess_session(session_path, seq_length=100, stride=1):
     }
 
 
+def _process_and_split_sessions(sessions, X_list, Y_list, output_dir):
+    """
+    Split sessions into train/val, normalizing, and saving.
+
+    Args:
+        sessions: List of session names
+        X_list: List of X arrays 
+        Y_list: List of Y arrays 
+        output_dir: Directory to save the train/val splits
+    """
+    num_train_sessions = int(len(sessions) * 0.8)
+    train_sessions = sessions[:num_train_sessions]
+    val_sessions = sessions[num_train_sessions:]
+
+    print(f"\nSplit:")
+    print(f"  Total sessions: {len(sessions)}")
+    for session, X in zip(sessions, X_list):
+        print(f"  {session}: {len(X):,} sequences")
+
+    print(f"\nTrain sessions ({len(train_sessions)}): {train_sessions}")
+    print(f"Val sessions ({len(val_sessions)}): {val_sessions}")
+
+    X_train_list = X_list[:num_train_sessions]
+    Y_train_list = Y_list[:num_train_sessions]
+    X_val_list = X_list[num_train_sessions:]
+    Y_val_list = Y_list[num_train_sessions:]
+
+    X_train_raw = np.concatenate(X_train_list, axis=0)
+    Y_train_raw = np.concatenate(Y_train_list, axis=0)
+    X_val_raw = np.concatenate(X_val_list, axis=0)
+    Y_val_raw = np.concatenate(Y_val_list, axis=0)
+
+    print(f"\n{'='*60}")
+    print(f"Combined shapes:")
+    print(f"  Train: {X_train_raw.shape}")
+    print(f"  Val: {X_val_raw.shape}")
+    print(f"{'='*60}")
+
+    mean_X = X_train_raw.mean(axis=(0, 1))
+    std_X = X_train_raw.std(axis=(0, 1)) + 1e-8
+
+    X_train = (X_train_raw - mean_X) / std_X
+    X_val = (X_val_raw - mean_X) / std_X
+
+    visual_indices = list(range(0, 12)) + list(range(28, 40))
+    mean_Y = mean_X[visual_indices]
+    std_Y = std_X[visual_indices]
+    Y_train = (Y_train_raw - mean_Y) / std_Y
+    Y_val = (Y_val_raw - mean_Y) / std_Y
+
+    print(f"\nActual split:")
+    print(f"  Train: {len(X_train):,} sequences from {len(train_sessions)} sessions")
+    print(f"  Val: {len(X_val):,} sequences from {len(val_sessions)} sessions")
+
+    np.save(output_dir / "Xij_train.npy", X_train)
+    np.save(output_dir / "Yij_train.npy", Y_train)
+    np.save(output_dir / "Xij_val.npy", X_val)
+    np.save(output_dir / "Yij_val.npy", Y_val)
+    np.save(output_dir / "stats.npy", {'mean_X': mean_X, 'std_X': std_X, 'mean_Y': mean_Y, 'std_Y': std_Y})
+
+    print(f"\nSaved to {output_dir}:")
+    print(f"  Xij_train.npy: {X_train.shape}")
+    print(f"  Yij_train.npy: {Y_train.shape}")
+    print(f"  Xij_val.npy: {X_val.shape}")
+    print(f"  Yij_val.npy: {Y_val.shape}")
+
+
 def preprocess_city(data_dir, output_dir, city_name):
     """Preprocess all sessions for a specific city."""
     data_dir = Path(data_dir)
@@ -177,73 +244,7 @@ def preprocess_city(data_dir, output_dir, city_name):
         except Exception as e:
             print(f"Skipping {session}: {e}")
 
-    # Combine all sessions
-    X_all = np.concatenate(X_list, axis=0)
-    Y_all = np.concatenate(Y_list, axis=0)
-
-    print(f"\n{'='*60}")
-    print(f"Combined: {X_all.shape}")
-    print(f"{'='*60}")
-
-    mean_X = X_all.mean(axis=(0, 1))
-    std_X = X_all.std(axis=(0, 1)) + 1e-8
-    X_norm = (X_all - mean_X) / std_X
-
-    visual_indices = list(range(0, 12)) + list(range(28, 40))
-    mean_Y = mean_X[visual_indices]
-    std_Y = std_X[visual_indices]
-    Y_norm = (Y_all - mean_Y) / std_Y
-
-    # Split by session
-    # Calculate session boundaries
-    session_lengths = [len(X) for X in X_list]
-    session_boundaries = np.cumsum([0] + session_lengths)
-
-    print(f"\nSession-based split:")
-    print(f"  Total sessions: {len(sessions)}")
-    for i, session in enumerate(sessions):
-        print(f"  {session}: {session_lengths[i]:,} sequences")
-
-    # Use first 80% of sessions for training, last 20% for validation
-    num_train_sessions = int(len(sessions) * 0.8)
-    train_sessions = sessions[:num_train_sessions]
-    val_sessions = sessions[num_train_sessions:]
-
-    print(f"\nTrain sessions ({len(train_sessions)}): {train_sessions}")
-    print(f"Val sessions ({len(val_sessions)}): {val_sessions}")
-
-    # Get indices for train and val
-    train_indices = []
-    val_indices = []
-    for i in range(len(sessions)):
-        start_idx = session_boundaries[i]
-        end_idx = session_boundaries[i + 1]
-        if i < num_train_sessions:
-            train_indices.extend(range(start_idx, end_idx))
-        else:
-            val_indices.extend(range(start_idx, end_idx))
-
-    X_train = X_norm[train_indices]
-    Y_train = Y_norm[train_indices]
-    X_val = X_norm[val_indices]
-    Y_val = Y_norm[val_indices]
-
-    print(f"\nActual split:")
-    print(f"  Train: {len(train_indices):,} sequences from {len(train_sessions)} sessions")
-    print(f"  Val: {len(val_indices):,} sequences from {len(val_sessions)} sessions")
-
-    # Save
-    np.save(output_dir / "Xij_train.npy", X_train)
-    np.save(output_dir / "Yij_train.npy", Y_train)
-    np.save(output_dir / "Xij_val.npy", X_val)
-    np.save(output_dir / "Yij_val.npy", Y_val)
-    np.save(output_dir / "stats.npy", {'mean_X': mean_X, 'std_X': std_X, 'mean_Y': mean_Y, 'std_Y': std_Y})
-
-    print(f"\nSaved to {output_dir}:")
-    print(f"  Xij_train.npy: {X_train.shape}")
-    print(f"  Yij_train.npy: {Y_train.shape}")
-    print(f"  Xij_val.npy: {X_val.shape}")
-    print(f"  Yij_val.npy: {Y_val.shape}")
+    _process_and_split_sessions(sessions, X_list, Y_list, output_dir)
 
 
 def preprocess_all(data_dir, output_dir):
@@ -266,73 +267,7 @@ def preprocess_all(data_dir, output_dir):
         except Exception as e:
             print(f"Skipping {session}: {e}")
 
-    # Combine all sessions
-    X_all = np.concatenate(X_list, axis=0)
-    Y_all = np.concatenate(Y_list, axis=0)
-
-    print(f"\n{'='*60}")
-    print(f"Combined: {X_all.shape}")
-    print(f"{'='*60}")
-
-    mean_X = X_all.mean(axis=(0, 1))
-    std_X = X_all.std(axis=(0, 1)) + 1e-8
-    X_norm = (X_all - mean_X) / std_X
-
-    visual_indices = list(range(0, 12)) + list(range(28, 40))
-    mean_Y = mean_X[visual_indices]
-    std_Y = std_X[visual_indices]
-    Y_norm = (Y_all - mean_Y) / std_Y
-
-    # Split by session 
-    # Calculate session boundaries
-    session_lengths = [len(X) for X in X_list]
-    session_boundaries = np.cumsum([0] + session_lengths)
-
-    print(f"\nSession-based split:")
-    print(f"  Total sessions: {len(sessions)}")
-    for i, session in enumerate(sessions):
-        print(f"  {session}: {session_lengths[i]:,} sequences")
-
-    # Use first 80% of sessions for training, last 20% for validation
-    num_train_sessions = int(len(sessions) * 0.8)
-    train_sessions = sessions[:num_train_sessions]
-    val_sessions = sessions[num_train_sessions:]
-
-    print(f"\nTrain sessions ({len(train_sessions)}): {train_sessions}")
-    print(f"Val sessions ({len(val_sessions)}): {val_sessions}")
-
-    # Get indices for train and val
-    train_indices = []
-    val_indices = []
-    for i in range(len(sessions)):
-        start_idx = session_boundaries[i]
-        end_idx = session_boundaries[i + 1]
-        if i < num_train_sessions:
-            train_indices.extend(range(start_idx, end_idx))
-        else:
-            val_indices.extend(range(start_idx, end_idx))
-
-    X_train = X_norm[train_indices]
-    Y_train = Y_norm[train_indices]
-    X_val = X_norm[val_indices]
-    Y_val = Y_norm[val_indices]
-
-    print(f"\nActual split:")
-    print(f"  Train: {len(train_indices):,} sequences from {len(train_sessions)} sessions")
-    print(f"  Val: {len(val_indices):,} sequences from {len(val_sessions)} sessions")
-
-    # Save
-    np.save(output_dir / "Xij_train.npy", X_train)
-    np.save(output_dir / "Yij_train.npy", Y_train)
-    np.save(output_dir / "Xij_val.npy", X_val)
-    np.save(output_dir / "Yij_val.npy", Y_val)
-    np.save(output_dir / "stats.npy", {'mean_X': mean_X, 'std_X': std_X, 'mean_Y': mean_Y, 'std_Y': std_Y})
-
-    print(f"\nSaved to {output_dir}:")
-    print(f"  Xij_train.npy: {X_train.shape}")
-    print(f"  Yij_train.npy: {Y_train.shape}")
-    print(f"  Xij_val.npy: {X_val.shape}")
-    print(f"  Yij_val.npy: {Y_val.shape}")
+    _process_and_split_sessions(sessions, X_list, Y_list, output_dir)
 
 
 if __name__ == "__main__":
