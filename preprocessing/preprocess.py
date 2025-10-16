@@ -194,10 +194,43 @@ def preprocess_city(data_dir, output_dir, city_name):
     std_Y = std_X[visual_indices]
     Y_norm = (Y_all - mean_Y) / std_Y
 
-    # Split into train (80%) and val (20%)
-    split_idx = int(len(X_norm) * 0.8)
-    X_train, X_val = X_norm[:split_idx], X_norm[split_idx:]
-    Y_train, Y_val = Y_norm[:split_idx], Y_norm[split_idx:]
+    # Split by session
+    # Calculate session boundaries
+    session_lengths = [len(X) for X in X_list]
+    session_boundaries = np.cumsum([0] + session_lengths)
+
+    print(f"\nSession-based split:")
+    print(f"  Total sessions: {len(sessions)}")
+    for i, session in enumerate(sessions):
+        print(f"  {session}: {session_lengths[i]:,} sequences")
+
+    # Use first 80% of sessions for training, last 20% for validation
+    num_train_sessions = int(len(sessions) * 0.8)
+    train_sessions = sessions[:num_train_sessions]
+    val_sessions = sessions[num_train_sessions:]
+
+    print(f"\nTrain sessions ({len(train_sessions)}): {train_sessions}")
+    print(f"Val sessions ({len(val_sessions)}): {val_sessions}")
+
+    # Get indices for train and val
+    train_indices = []
+    val_indices = []
+    for i in range(len(sessions)):
+        start_idx = session_boundaries[i]
+        end_idx = session_boundaries[i + 1]
+        if i < num_train_sessions:
+            train_indices.extend(range(start_idx, end_idx))
+        else:
+            val_indices.extend(range(start_idx, end_idx))
+
+    X_train = X_norm[train_indices]
+    Y_train = Y_norm[train_indices]
+    X_val = X_norm[val_indices]
+    Y_val = Y_norm[val_indices]
+
+    print(f"\nActual split:")
+    print(f"  Train: {len(train_indices):,} sequences from {len(train_sessions)} sessions")
+    print(f"  Val: {len(val_indices):,} sequences from {len(val_sessions)} sessions")
 
     # Save
     np.save(output_dir / "Xij_train.npy", X_train)
@@ -250,10 +283,43 @@ def preprocess_all(data_dir, output_dir):
     std_Y = std_X[visual_indices]
     Y_norm = (Y_all - mean_Y) / std_Y
 
-    # Split into train (80%) and val (20%)
-    split_idx = int(len(X_norm) * 0.8)
-    X_train, X_val = X_norm[:split_idx], X_norm[split_idx:]
-    Y_train, Y_val = Y_norm[:split_idx], Y_norm[split_idx:]
+    # Split by session 
+    # Calculate session boundaries
+    session_lengths = [len(X) for X in X_list]
+    session_boundaries = np.cumsum([0] + session_lengths)
+
+    print(f"\nSession-based split:")
+    print(f"  Total sessions: {len(sessions)}")
+    for i, session in enumerate(sessions):
+        print(f"  {session}: {session_lengths[i]:,} sequences")
+
+    # Use first 80% of sessions for training, last 20% for validation
+    num_train_sessions = int(len(sessions) * 0.8)
+    train_sessions = sessions[:num_train_sessions]
+    val_sessions = sessions[num_train_sessions:]
+
+    print(f"\nTrain sessions ({len(train_sessions)}): {train_sessions}")
+    print(f"Val sessions ({len(val_sessions)}): {val_sessions}")
+
+    # Get indices for train and val
+    train_indices = []
+    val_indices = []
+    for i in range(len(sessions)):
+        start_idx = session_boundaries[i]
+        end_idx = session_boundaries[i + 1]
+        if i < num_train_sessions:
+            train_indices.extend(range(start_idx, end_idx))
+        else:
+            val_indices.extend(range(start_idx, end_idx))
+
+    X_train = X_norm[train_indices]
+    Y_train = Y_norm[train_indices]
+    X_val = X_norm[val_indices]
+    Y_val = Y_norm[val_indices]
+
+    print(f"\nActual split:")
+    print(f"  Train: {len(train_indices):,} sequences from {len(train_sessions)} sessions")
+    print(f"  Val: {len(val_indices):,} sequences from {len(val_sessions)} sessions")
 
     # Save
     np.save(output_dir / "Xij_train.npy", X_train)
