@@ -98,16 +98,17 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 		assert d_model % num_heads == 0
 		depth = d_model // num_heads
 		self.num_heads = num_heads
+		self.causal = causal
 		self.w_query = tf.keras.layers.Dense(d_model)
-		self.split_reshape_query = tf.keras.layers.Reshape((-1,num_heads,depth))  
-		self.split_permute_query = tf.keras.layers.Permute((2,1,3))      
+		self.split_reshape_query = tf.keras.layers.Reshape((-1,num_heads,depth))
+		self.split_permute_query = tf.keras.layers.Permute((2,1,3))
 		self.w_value = tf.keras.layers.Dense(d_model)
 		self.split_reshape_value = tf.keras.layers.Reshape((-1,num_heads,depth))
 		self.split_permute_value = tf.keras.layers.Permute((2,1,3))
 		self.w_key = tf.keras.layers.Dense(d_model)
 		self.split_reshape_key = tf.keras.layers.Reshape((-1,num_heads,depth))
 		self.split_permute_key = tf.keras.layers.Permute((2,1,3))
-		self.attention = tf.keras.layers.Attention(causal=causal, dropout=dropout)
+		self.attention = tf.keras.layers.Attention(dropout=dropout)
 		self.join_permute_attention = tf.keras.layers.Permute((2,1,3))
 		self.join_reshape_attention = tf.keras.layers.Reshape((-1,d_model))
 		self.pruning = Dense(num_heads, activation='hard_sigmoid')
@@ -137,11 +138,14 @@ class MultiHeadAttention(tf.keras.layers.Layer):
 				mask[1] = tf.keras.layers.Reshape((-1,1))(mask[1])
 				mask[1] = tf.keras.layers.Permute((2,1))(mask[1])
 
-		attention = self.attention([query, value, key], mask=mask)
+		attention = self.attention([query, value, key], mask=mask, use_causal_mask=self.causal)
 		
 		if pruning:
 			pruning_mask = self.pruning(self.split_permute_pruning(attention))
-			pruning_mask = tf.round(pruning_mask)
+			# Straight-through estimator: use rounded values in forward pass,
+			# but pass gradients through the continuous values
+			pruning_mask_rounded = tf.round(pruning_mask)
+			pruning_mask = pruning_mask + tf.stop_gradient(pruning_mask_rounded - pruning_mask)
 			pruning_mask = self.split_permute_pruning(pruning_mask)
 			attention = attention*pruning_mask
 
@@ -181,23 +185,24 @@ def build_model(params_config, params_model):
 	inputs = keras.layers.Input(shape=(in_seq_len, nb_inputs))
 	mha = MultiHeadAttention(d_model=cell_att,num_heads=num_head_att)
 	x = mha([inputs,inputs,inputs], pruning=pruning_stat)
-	x = LSTM(cell_lstm, input_shape=(in_seq_len, nb_inputs))(x)
+	x = LSTM(cell_lstm, return_sequences=True)(x)
 	x = Dense(cell_dense, activation='relu')(x)
 
 	output_RotXYZ = Dense(3, activation='linear', name='RotXYZ')(x)
-	output_au1_intensity = Dense(1, activation='relu', name='AU1_int')(x)
-	output_au2_intensity = Dense(1, activation='relu', name='AU2_int')(x)
-	output_au4_intensity = Dense(1, activation='relu', name='AU4_int')(x)
-	output_au5_intensity = Dense(1, activation='relu', name='AU5_int')(x)
-	output_au6_intensity = Dense(1, activation='relu', name='AU6_int')(x)
-	output_au7_intensity = Dense(1, activation='relu', name='AU7_int')(x)
-	output_au12_intensity = Dense(1, activation='relu', name='AU12_int')(x)
+	output_au1_intensity = tf.squeeze(Dense(1, activation='relu', name='AU1_int')(x), axis=-1)
+	output_au2_intensity = tf.squeeze(Dense(1, activation='relu', name='AU2_int')(x), axis=-1)
+	output_au4_intensity = tf.squeeze(Dense(1, activation='relu', name='AU4_int')(x), axis=-1)
+	output_au5_intensity = tf.squeeze(Dense(1, activation='relu', name='AU5_int')(x), axis=-1)
+	output_au6_intensity = tf.squeeze(Dense(1, activation='relu', name='AU6_int')(x), axis=-1)
+	output_au7_intensity = tf.squeeze(Dense(1, activation='relu', name='AU7_int')(x), axis=-1)
+	output_au12_intensity = tf.squeeze(Dense(1, activation='relu', name='AU12_int')(x), axis=-1)
 	output_GazeXY = Dense(2, activation='linear', name='GazeXY')(x)
-	output_RotX = tf.identity(output_RotXYZ[:,0], name="RotX")
-	output_RotY = tf.identity(output_RotXYZ[:,1], name="RotY")
-	output_RotZ = tf.identity(output_RotXYZ[:,2], name="RotZ")
-	output_GazeX = tf.identity(output_GazeXY[:,0], name="GazeX")
-	output_GazeY = tf.identity(output_GazeXY[:,1], name="GazeY")
+	# Extract individual features along last dimension (keep time dimension)
+	output_RotX = tf.identity(output_RotXYZ[:,:,0], name="RotX")
+	output_RotY = tf.identity(output_RotXYZ[:,:,1], name="RotY")
+	output_RotZ = tf.identity(output_RotXYZ[:,:,2], name="RotZ")
+	output_GazeX = tf.identity(output_GazeXY[:,:,0], name="GazeX")
+	output_GazeY = tf.identity(output_GazeXY[:,:,1], name="GazeY")
 
 	output_list = [output_RotX, output_RotY, output_RotZ,\
 									output_au1_intensity, output_au2_intensity, output_au4_intensity, output_au5_intensity, output_au6_intensity, output_au7_intensity, output_au12_intensity,\
@@ -208,12 +213,12 @@ def build_model(params_config, params_model):
 	loss_list = ['mse','mse','mse',\
 								'mse','mse','mse','mse','mse','mse','mse',\
 								'mse','mse']
-									
+
 	model.compile(loss=loss_list, optimizer='adam')
 
 	return model
 
-def train_model(model_tr, xij_tr, yij_tr, xij_val, yij_val, params_train, params_generator, dir_path_batchtr="../trainedASAP"):
+def train_model(model_tr, xij_tr, yij_tr, xij_val, yij_val, params_train, params_generator, dir_path_batchtr="trainedASAP"):
 	'Train ASAP model'
 	nb_epoch = params_train["nb_epoch"]
 	reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, verbose=1, mode='min', min_lr=1e-7, cooldown=1)
