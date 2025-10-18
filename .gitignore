@@ -34,10 +34,6 @@ env/
 *~
 .DS_Store
 
-# Jupyter Notebook
-.ipynb_checkpoints/
-*.ipynb
-
 # TensorFlow/Keras
 *.h5
 *.hdf5
