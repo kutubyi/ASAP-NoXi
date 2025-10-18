@@ -1,0 +1,101 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# TensorFlow/Keras
+*.h5
+*.hdf5
+*.keras
+checkpoints/
+logs/
+tensorboard/
+
+# Data files (NoXi dataset)
+data/
+datasets/
+*.mp4
+*.avi
+*.wav
+*.csv
+*.pkl
+*.pickle
+*.npy
+*.npz
+
+# Models
+models/
+weights/
+saved_models/
+*.pb
+trainedASAP/
+
+# Outputs
+output/
+outputs/
+results/
+plots/
+figures/
+*.png
+*.jpg
+*.jpeg
+
+# OpenFace
+OpenFace/
+openface/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment variables
+.env
+.env.local
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.log
+*.bak
